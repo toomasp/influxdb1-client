@@ -2,112 +2,263 @@ package client_test
 
 import (
 	"fmt"
-	"log"
-	"math/rand"
-	"net/url"
+  client "github.com/toomasp/influxdb1-client"
+  "math/rand"
 	"os"
-	"strconv"
 	"time"
-
-	client "github.com/toomasp/influxdb1-client"
 )
 
-func ExampleNewClient() {
-	host, err := url.Parse(fmt.Sprintf("http://%s:%d", "localhost", 8086))
-	if err != nil {
-		log.Fatal(err)
-	}
-
+// Create a new client
+func ExampleClient() {
 	// NOTE: this assumes you've setup a user and have setup shell env variables,
 	// namely INFLUX_USER/INFLUX_PWD. If not just omit Username/Password below.
-	conf := client.Config{
-		URL:      *host,
+	_, err := client.NewHTTPClient(client.HTTPConfig{
+		Addr:     "http://localhost:8086",
 		Username: os.Getenv("INFLUX_USER"),
 		Password: os.Getenv("INFLUX_PWD"),
-	}
-	con, err := client.NewClient(conf)
+	})
 	if err != nil {
-		log.Fatal(err)
+		fmt.Println("Error creating InfluxDB Client: ", err.Error())
 	}
-	log.Println("Connection", con)
 }
 
+// Write a point using the UDP client
+func ExampleClient_uDP() {
+	// Make client
+	config := client.UDPConfig{Addr: "localhost:8089"}
+	c, err := client.NewUDPClient(config)
+	if err != nil {
+		fmt.Println("Error: ", err.Error())
+	}
+	defer c.Close()
+
+	// Create a new point batch
+	bp, _ := client.NewBatchPoints(client.BatchPointsConfig{
+		Precision: "s",
+	})
+
+	// Create a point and add to batch
+	tags := map[string]string{"cpu": "cpu-total"}
+	fields := map[string]interface{}{
+		"idle":   10.1,
+		"system": 53.3,
+		"user":   46.6,
+	}
+	pt, err := client.NewPoint("cpu_usage", tags, fields, time.Now())
+	if err != nil {
+		fmt.Println("Error: ", err.Error())
+	}
+	bp.AddPoint(pt)
+
+	// Write the batch
+	c.Write(bp)
+}
+
+// Ping the cluster using the HTTP client
 func ExampleClient_Ping() {
-	host, err := url.Parse(fmt.Sprintf("http://%s:%d", "localhost", 8086))
+	// Make client
+	c, err := client.NewHTTPClient(client.HTTPConfig{
+		Addr: "http://localhost:8086",
+	})
 	if err != nil {
-		log.Fatal(err)
+		fmt.Println("Error creating InfluxDB Client: ", err.Error())
 	}
-	con, err := client.NewClient(client.Config{URL: *host})
-	if err != nil {
-		log.Fatal(err)
-	}
+	defer c.Close()
 
-	dur, ver, err := con.Ping()
+	_, _, err = c.Ping(0)
 	if err != nil {
-		log.Fatal(err)
-	}
-	log.Printf("Happy as a hippo! %v, %s", dur, ver)
-}
-
-func ExampleClient_Query() {
-	host, err := url.Parse(fmt.Sprintf("http://%s:%d", "localhost", 8086))
-	if err != nil {
-		log.Fatal(err)
-	}
-	con, err := client.NewClient(client.Config{URL: *host})
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	q := client.Query{
-		Command:  "select count(value) from shapes",
-		Database: "square_holes",
-	}
-	if response, err := con.Query(q); err == nil && response.Error() == nil {
-		log.Println(response.Results)
+		fmt.Println("Error pinging InfluxDB Cluster: ", err.Error())
 	}
 }
 
-func ExampleClient_Write() {
-	host, err := url.Parse(fmt.Sprintf("http://%s:%d", "localhost", 8086))
+// Write a point using the HTTP client
+func ExampleClient_write() {
+	// Make client
+	c, err := client.NewHTTPClient(client.HTTPConfig{
+		Addr: "http://localhost:8086",
+	})
 	if err != nil {
-		log.Fatal(err)
+		fmt.Println("Error creating InfluxDB Client: ", err.Error())
 	}
-	con, err := client.NewClient(client.Config{URL: *host})
-	if err != nil {
-		log.Fatal(err)
-	}
+	defer c.Close()
 
-	var (
-		shapes     = []string{"circle", "rectangle", "square", "triangle"}
-		colors     = []string{"red", "blue", "green"}
-		sampleSize = 1000
-		pts        = make([]client.Point, sampleSize)
-	)
+	// Create a new point batch
+	bp, _ := client.NewBatchPoints(client.BatchPointsConfig{
+		Database:  "BumbleBeeTuna",
+		Precision: "s",
+	})
+
+	// Create a point and add to batch
+	tags := map[string]string{"cpu": "cpu-total"}
+	fields := map[string]interface{}{
+		"idle":   10.1,
+		"system": 53.3,
+		"user":   46.6,
+	}
+	pt, err := client.NewPoint("cpu_usage", tags, fields, time.Now())
+	if err != nil {
+		fmt.Println("Error: ", err.Error())
+	}
+	bp.AddPoint(pt)
+
+	// Write the batch
+	c.Write(bp)
+}
+
+// Create a batch and add a point
+func ExampleBatchPoints() {
+	// Create a new point batch
+	bp, _ := client.NewBatchPoints(client.BatchPointsConfig{
+		Database:  "BumbleBeeTuna",
+		Precision: "s",
+	})
+
+	// Create a point and add to batch
+	tags := map[string]string{"cpu": "cpu-total"}
+	fields := map[string]interface{}{
+		"idle":   10.1,
+		"system": 53.3,
+		"user":   46.6,
+	}
+	pt, err := client.NewPoint("cpu_usage", tags, fields, time.Now())
+	if err != nil {
+		fmt.Println("Error: ", err.Error())
+	}
+	bp.AddPoint(pt)
+}
+
+// Using the BatchPoints setter functions
+func ExampleBatchPoints_setters() {
+	// Create a new point batch
+	bp, _ := client.NewBatchPoints(client.BatchPointsConfig{})
+	bp.SetDatabase("BumbleBeeTuna")
+	bp.SetPrecision("ms")
+
+	// Create a point and add to batch
+	tags := map[string]string{"cpu": "cpu-total"}
+	fields := map[string]interface{}{
+		"idle":   10.1,
+		"system": 53.3,
+		"user":   46.6,
+	}
+	pt, err := client.NewPoint("cpu_usage", tags, fields, time.Now())
+	if err != nil {
+		fmt.Println("Error: ", err.Error())
+	}
+	bp.AddPoint(pt)
+}
+
+// Create a new point with a timestamp
+func ExamplePoint() {
+	tags := map[string]string{"cpu": "cpu-total"}
+	fields := map[string]interface{}{
+		"idle":   10.1,
+		"system": 53.3,
+		"user":   46.6,
+	}
+	pt, err := client.NewPoint("cpu_usage", tags, fields, time.Now())
+	if err == nil {
+		fmt.Println("We created a point: ", pt.String())
+	}
+}
+
+// Create a new point without a timestamp
+func ExamplePoint_withoutTime() {
+	tags := map[string]string{"cpu": "cpu-total"}
+	fields := map[string]interface{}{
+		"idle":   10.1,
+		"system": 53.3,
+		"user":   46.6,
+	}
+	pt, err := client.NewPoint("cpu_usage", tags, fields)
+	if err == nil {
+		fmt.Println("We created a point w/o time: ", pt.String())
+	}
+}
+
+// Write 1000 points
+func ExampleClient_write1000() {
+	sampleSize := 1000
+
+	// Make client
+	c, err := client.NewHTTPClient(client.HTTPConfig{
+		Addr: "http://localhost:8086",
+	})
+	if err != nil {
+		fmt.Println("Error creating InfluxDB Client: ", err.Error())
+	}
+	defer c.Close()
 
 	rand.Seed(42)
+
+	bp, _ := client.NewBatchPoints(client.BatchPointsConfig{
+		Database:  "systemstats",
+		Precision: "us",
+	})
+
 	for i := 0; i < sampleSize; i++ {
-		pts[i] = client.Point{
-			Measurement: "shapes",
-			Tags: map[string]string{
-				"color": strconv.Itoa(rand.Intn(len(colors))),
-				"shape": strconv.Itoa(rand.Intn(len(shapes))),
-			},
-			Fields: map[string]interface{}{
-				"value": rand.Intn(sampleSize),
-			},
-			Time:      time.Now(),
-			Precision: "s",
+		regions := []string{"us-west1", "us-west2", "us-west3", "us-east1"}
+		tags := map[string]string{
+			"cpu":    "cpu-total",
+			"host":   fmt.Sprintf("host%d", rand.Intn(1000)),
+			"region": regions[rand.Intn(len(regions))],
 		}
+
+		idle := rand.Float64() * 100.0
+		fields := map[string]interface{}{
+			"idle": idle,
+			"busy": 100.0 - idle,
+		}
+
+		pt, err := client.NewPoint(
+			"cpu_usage",
+			tags,
+			fields,
+			time.Now(),
+		)
+		if err != nil {
+			println("Error:", err.Error())
+			continue
+		}
+		bp.AddPoint(pt)
 	}
 
-	bps := client.BatchPoints{
-		Points:          pts,
-		Database:        "BumbeBeeTuna",
-		RetentionPolicy: "default",
-	}
-	_, err = con.Write(bps)
+	err = c.Write(bp)
 	if err != nil {
-		log.Fatal(err)
+		fmt.Println("Error: ", err.Error())
+	}
+}
+
+// Make a Query
+func ExampleClient_query() {
+	// Make client
+	c, err := client.NewHTTPClient(client.HTTPConfig{
+		Addr: "http://localhost:8086",
+	})
+	if err != nil {
+		fmt.Println("Error creating InfluxDB Client: ", err.Error())
+	}
+	defer c.Close()
+
+	q := client.NewQuery("SELECT count(value) FROM shapes", "square_holes", "ns")
+	if response, err := c.Query(q); err == nil && response.Error() == nil {
+		fmt.Println(response.Results)
+	}
+}
+
+// Create a Database with a query
+func ExampleClient_createDatabase() {
+	// Make client
+	c, err := client.NewHTTPClient(client.HTTPConfig{
+		Addr: "http://localhost:8086",
+	})
+	if err != nil {
+		fmt.Println("Error creating InfluxDB Client: ", err.Error())
+	}
+	defer c.Close()
+
+	q := client.NewQuery("CREATE DATABASE telegraf", "", "")
+	if response, err := c.Query(q); err == nil && response.Error() == nil {
+		fmt.Println(response.Results)
 	}
 }
